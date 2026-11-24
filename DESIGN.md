@@ -178,3 +178,34 @@ qq_bridge_napcat
   并把 QQ 消息当**不可信输入**（群友可注入），需要动手就停下等人。理由见 `HANDOVER.md` §14。
 - 形态：**host 平面 profile bundle**（像 dsh-cron 一样 `dsh plugin add` 安装）+ **一个浏览器半**
   （`dsh.client`，只为了那张设置卡片），不是 agent preset。
+
+## 10. v0.2.0：内容与社交模块
+
+原来的插件只负责「把 QQ 消息送进会话、把回复送出去」。v0.2.0 多了一层**她自己去看东西**的能力，
+放在 `lib/` 下，每个模块只做一件事，出错也不互相拖垮（都在 `try/catch` 里创建，
+创建失败只留一条 warn 日志，QQ 收发照常）。
+
+| 模块 | 负责 | 状态落在 |
+|---|---|---|
+| `lib/qzone/` | QQ 空间：动态、评论、回复、签名、频率闸门 | `qq-bridge-qzone.json` + 独立的 `qq-bridge-qzone-usage.json` |
+| `lib/bilibili/` | B 站：登录（WBI 签名）、搜索、视频、字幕、评论草稿、音轨 | `bilibili/` |
+| `lib/browser/` | 一个常驻的有头 Edge（playwright-core + 独立 profile） | `qq-bridge-browser/` |
+| `lib/douyin/` | 抖音：单条链接的文案 / 评论 / 截图 / 音轨 | `qq-bridge-shots/` |
+| `lib/web/` | 网页阅读与搜索（RSS 主路 + 页面兜底） | 无状态 |
+| `lib/media/` | 抽帧、ffmpeg 转 wav、下载 | `qq-bridge-shots/`、`qq-bridge-audio/` |
+| `lib/whisper/` | 本地听写（faster-whisper + venv） | `whisper-models/`、`whisper-venv/` |
+
+**几个刻意的取舍**：
+
+- **浏览器必须有头、但窗口在屏幕外**。抖音对 headless 直接跳验证码；窗口移到 `-2200,-2200`
+  并最小化、加 `--mute-audio`，既躲过检测又不打扰人（真机上被"两个浏览器同时放歌"抱怨过一次）。
+  profile 独立：Edge 127+ 的 cookie 应用绑定加密，复制用户 profile 解不开，只能各存一份登录态。
+- **搜索主路走必应 RSS，不走页面**。同一条查询在冷启动的浏览器里会偶发白屏（实测连续两次空页），
+  RSS 一次就回来，还顺带没有推广位。页面抓取只在 RSS 不通时兜底。
+- **抽帧用浏览器截图，不用解析视频流**。B 站是 dash + 防盗链，直接下流容易碎；
+  浏览器已经把画面解码好了，截 `video` 元素就是"她能看到的那一帧"。
+- **所有"看见"最终都落到文字**。目标会话的模型不一定吃图，所以截图/抽帧都要再过一次视觉模型写描述；
+  不转的话模型会说"我看到了画面"，而它手上只有一个文件路径。
+- **写操作与读操作分家**：空间评论/回复/签名有最小间隔与每小时上限，B 站评论只存草稿；
+  读的一律没有闸门，因为读不改变外部状态。
+
