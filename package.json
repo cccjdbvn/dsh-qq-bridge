@@ -1,0 +1,73 @@
+{
+  "name": "dsh-qq-bridge",
+  "version": "0.2.0",
+  "type": "module",
+  "main": "index.js",
+  "description": "Bridge one fixed DSH session to QQ (OneBot/NapCat) and keep its context, then let it go online: web page reading, search, Bilibili (subtitles/comments/transcription/frame grabs), single Douyin videos, and QQ Zone read/write. 把一个固定的 DSH 会话接到 QQ（OneBot/NapCat）：白名单 + @/昵称必唤醒 + 概率唤醒，并让它能读网页、搜索、看 B 站、看单条抖音、逛 QQ 空间。",
+  "license": "MIT",
+  "author": "sj244",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "onebot",
+    "napcat",
+    "qq",
+    "bridge",
+    "qzone",
+    "bilibili",
+    "douyin",
+    "web-reader",
+    "whisper"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cccjdbvn/dsh-qq-bridge.git"
+  },
+  "homepage": "https://github.com/cccjdbvn/dsh-qq-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/cccjdbvn/dsh-qq-bridge/issues"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client/client.js",
+    "./onebot.js": "./onebot.js",
+    "./napcat.js": "./napcat.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "onebot.js",
+    "napcat.js",
+    "stickers.js",
+    "client",
+    "lib",
+    "assets",
+    "screenshots.json",
+    "cordis.patch.yml",
+    "README.md",
+    "DESIGN.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/schemastery": "*"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.1.1",
+    "fontkit": "^3.0.0"
+  }
+}
