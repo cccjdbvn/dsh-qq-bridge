@@ -30,3 +30,7 @@ Thumbs.db
 
 # 手工留下的改前备份（index.js.bak-2026…、package.json.bak-…）
 *.bak-*
+
+# Python 编译缓存（lib/media/analyze.py 跑一次就会生成）
+__pycache__/
+*.pyc

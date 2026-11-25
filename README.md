@@ -9,10 +9,12 @@ and launch **NapCat** for you.
 
 From v0.2.0 it can also **go online**: read a web page, search the web, watch a **Bilibili** video
 (subtitles · comments · audio transcription · frame grabs), look at one **Douyin** video, and
-read or comment on a **QQ Zone** entry — all behind the same whitelist.
+read or comment on a **QQ Zone** entry — all behind the same whitelist. Since v0.3.0 the **frames
+are handed to the model as real images**, not only as text descriptions.
 
 把一个已有的 DSH 会话接到 QQ（OneBot / NapCat 个人号），提供类似 QQ 群友的交互感受。
-从 v0.2.0 起它还会**上网**：读网页、搜索、看 B 站（字幕 / 评论 / 听写 / 抽帧）、看单条抖音、逛 QQ 空间。
+从 v0.2.0 起它还会**上网**：读网页、搜索、看 B 站（字幕 / 评论 / 听写 / 抽帧）、看单条抖音、逛 QQ 空间；
+从 v0.3.0 起**画面直接送到模型眼前**（图 + 描述一起给），QQ 里的语音条也会自动转成文字。
 
 ```sh
 dsh plugin --profile web add github:cccjdbvn/dsh-qq-bridge
@@ -21,8 +23,8 @@ dsh plugin --profile web add github:cccjdbvn/dsh-qq-bridge
 > Created with DSH itself — this is a vibecoding project. / 这是个 vibecoding 项目。本项目由 DSH 写成。
 
 - 设计：[`DESIGN.md`](./DESIGN.md) ｜ 里程碑与真机实录：[`HANDOVER.md`](./HANDOVER.md) ｜ 变更：[`CHANGELOG.md`](./CHANGELOG.md)
-- 当前版本 **v0.2.0**（内容与社交，见 [`CHANGELOG.md`](./CHANGELOG.md)）
-- **M1–M8 全部完成**，已在**真实 NapCat + 真实 QQ** 上端到端跑通（Windows 真机）；**M10 内容与社交** 已完成
+- 当前版本 **v0.3.0**（画面直达 + 音频分析，见 [`CHANGELOG.md`](./CHANGELOG.md)）
+- **M1–M8 全部完成**，已在**真实 NapCat + 真实 QQ** 上端到端跑通（Windows 真机）；**M10 内容与社交**、**M11 声音与画面** 已完成
 
 ## 目录
 
@@ -46,6 +48,8 @@ dsh plugin --profile web add github:cccjdbvn/dsh-qq-bridge
   `设置 → 插件 → 插件配置` 里修改，保存即生效。
 - **NapCat 自助托管**：插件可以按需下载、校验、解包、写配置、启停 NapCat。
 - **会上网**（v0.2.0）：读网页正文、搜索、看 B 站（字幕 / 评论 / 听写 / 抽帧）、看单条抖音、逛 QQ 空间。
+- **画面直达**（v0.3.0）：抽帧和截图作为**原图**附进这一轮（一次最多 6 张），配文字描述兜底；
+  QQ 里的语音条自动转写成文字；另带一个音频分析工具（响度 / BPM / 波形频谱）。
   见[内容与社交](#内容与社交)。
 
 **不做的三件事**：
@@ -345,7 +349,7 @@ v0.2.0 加的一整块：让这个会话不只收发 QQ，还能自己去看东�
 
 ### B 站
 
-`qq_bridge_bilibili`，一个工具 13 个 action：
+`qq_bridge_bilibili`，一个工具 14 个 action：
 
 | action | 说明 |
 |---|---|
@@ -353,12 +357,14 @@ v0.2.0 加的一整块：让这个会话不只收发 QQ，还能自己去看东�
 | `search` / `recommend` | 搜索 / 推荐，只返回候选视频信息，不等于看过 |
 | `video` / `comments` / `subtitles` / `read` | 视频信息、实际评论、实际字幕；`read` 把字幕和评论合在一起 |
 | `draft` | 评论**只存草稿**，不会自动发布 |
-| `listen` | 抓 dash 音轨 → ffmpeg 转 16k wav → 本地 whisper 听写（默认前 240 秒） |
-| `frames` | 真的打开视频页，按比例 seek 后截播放器画面，每帧再转成一段文字描述 |
+| `listen` | 只做听写：抓 dash 音轨 → ffmpeg 转 16k wav → 本地 whisper（默认最多 10 分钟） |
+| `frames` | **默认递送**：打开视频截开头/中间/结尾三帧（画面附在这一轮里），并顺手把整条音轨听完，一次拿全 |
+| `frame` | **主动抽帧**：`at` 一个时间点，或 `from`/`to` 一段区间；区间按**每秒最多一帧**取，最多 6 张 |
 
 - 登录态、阅读历史、评论草稿落在 `bilibili/`（和空间、听写分开存）。
 - 抽帧用浏览器截图，不解析视频流：B 站有 dash + 防盗链，直接下流容易碎，而浏览器已经把画面解码好了。
 - 覆盖范围：字幕/评论/听写是**文字**，抽帧是**几个瞬间**，都不是完整观看。
+- 听写在 CPU 上默认最多 10 分钟，超出会明说「只听了前 N 秒」，不假装听完。
 
 ### 抖音
 
@@ -379,14 +385,20 @@ v0.2.0 加的一整块：让这个会话不只收发 QQ，还能自己去看东�
 - 写操作有最小间隔（默认 60 秒）和每小时上限（默认 10 条）；签名每天只能改一次。
 - 平台回执只说明「收下了」，不等于对方看到；要核对就 `verify` 读回。
 
-### 看图与听写
+### 看图、听写与音频分析
 
 | 工具 | 作用 |
 |---|---|
-| `qq_bridge_look` | 把任意本地图片转成文字描述（先抄图里的字，再说画面） |
+| `qq_bridge_look` | 看一张本机图片：**原图附进这一轮** + 一段文字描述（先抄图里的字，再说画面） |
 | `qq_bridge_transcribe` | 音视频文件 → 文字（faster-whisper，离线，模型从 hf-mirror 下） |
+| `qq_bridge_audio` | 音频/音乐分析：时长、格式、采样率、声道、码率、响度、BPM、静音比例；可画波形/频谱图，可顺带听写 |
+| `qq_bridge_voice` | 用 Breeze 合成一句话并发成 QQ 语音条；三档语气，可临时换音色/语速 |
 
-两者都复用入站图片那条视觉链路与本地 whisper，不另起一套。
+- **图是直接送过去的**：2026-11-25 实测目标模型能读图，所以抽帧、抖音截图、看图都把原图作为
+  image block 附进这一轮（一次最多 6 张）。文字描述保留 —— 模型不支持图片时它是唯一能看的东西。
+- 音频分析里的 BPM 只在节拍明显时才报：算不出就说「节拍不明显」，不编一个数字。
+- 听写和看图都复用同一套：入站图片/语音的视觉链路与本地 whisper，不另起一套。
+- QQ 里的语音条会在唤醒时自动转成文字（`[语音#3秒]：说了什么`），听不清会写明原因。
 
 ## 设置界面与全部设置项
 
@@ -533,8 +545,10 @@ QQ 侧没有人能点击“同意”，因此：
 | `qq_bridge_qzone_feed` / `_comments` | `qzoneEnabled` | 读动态流 / 读某条说说下的评论与楼中楼 |
 | `qq_bridge_qzone_comment` / `_reply` / `_verify` | `qzoneEnabled` | 评论 / 回复 / 读回核对（前两者有频率闸门） |
 | `qq_bridge_qzone_sign` | `qzoneEnabled` | 改 QQ 签名（每天一次） |
-| `qq_bridge_look` | 始终 | 任意本地图片 → 文字描述 |
+| `qq_bridge_look` | 始终 | 任意本地图片 → 原图 + 文字描述 |
 | `qq_bridge_transcribe` | 始终 | 音视频文件 → 文字（本地 whisper） |
+| `qq_bridge_audio` | 始终 | 音频分析：格式/响度/BPM/波形频谱图，可顺带听写 |
+| `qq_bridge_voice` | 始终 | Breeze 合成一句话 → QQ 语音条 |
 
 `debugTools` 默认 `true`；关闭后只保留上表里不带 `debugTools` 的那些。
 
@@ -557,6 +571,12 @@ QQ 侧没有人能点击“同意”，因此：
 - **抖音只能看单条链接**：搜索页对自动化是连续验证码（首页正常），不提供搜索。
 - **B 站抽帧可能碰到试看/登录限制**：画面左下角出现「登录 免费看高清视频 试看30秒」这类水印时，
   说明当前账号对这个视频没有完整权限；`frames` 会如实返回没截到的部分，不补帧、不猜。
+- **一次最多送 6 张图**：图比文字贵得多，主动抽帧也因此限制在最多 6 帧。要更细就分几次点名，
+  别一口气截几十帧。
+- **听写在 CPU 上默认最多 10 分钟**：长视频只会听开头那段，结果里会写明「只听了前 N 秒」。
+  small 模型对带背景音乐的口语会混进繁体字、偶尔合并长段。
+- **画面是几个瞬间，不是连续视频**：她拿到的是抽帧 + 听写 + 描述，中间没截到的就是不知道。
+  别把「我看过这几帧」当成「我看完了」。
 - **听写用的是 `small` 模型**：中文口语会有个别词错（真机实录：「责怪他」被听成「倔舍他」）。
   要更准可以用 `medium`，代价是 CPU 上慢数倍。模型首次使用从 hf-mirror 下载（`small` 约 460MB）。
 - README / CHANGELOG 里的真机结论都来自 **Windows 10 + NapCat Shell + OneBot v11 + Edge** 这一套；
@@ -587,5 +607,6 @@ node test-stickers.mjs  # 表情包登记表：哈希 / 读写 / 查找 / 原子
 | **M8** ✅ | 分得清“在 QQ 还是 DSH 里”：出站闸门按来源生效、出站方式做成开关、改模式立刻重挂提示词 |
 | **M9** 🚧 | 戳一戳（入站已通，出站受 NapCat 限制，见[已知限制](#已知限制与环境要求)） |
 | **M10** ✅ | 内容与社交：QQ 空间读写、B 站（字幕/评论/听写/抽帧）、抖音单条观看、网页阅读与搜索、本地听写与看图 |
+| **M11** ✅ | 声音与画面：抽帧画面作为原图直达模型、默认递送（三帧 + 全片听写）、主动抽帧（每秒最多一帧）、入站语音转写、音频分析 |
 
 完整变更记录见 [`CHANGELOG.md`](./CHANGELOG.md)，发行版见 [Releases](https://github.com/cccjdbvn/dsh-qq-bridge/releases)。
